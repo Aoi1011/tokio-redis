@@ -1,46 +1,30 @@
 package main
 
-import (
-	"net/http"
-	"text/template"
-)
+import "fmt"
 
-func main() {
-	mux := http.NewServeMux()
-	files := http.FileServer(http.Dir(config.Static))
-	mux.Handle("/static/", http.StripPrefix("/static/", files))
-
-	mux.HandleFunc("/", index)
-	mux.HandleFunc("/err", err)
-
-	mux.HandleFunc("/login", login)
-	mux.HandleFunc("/logout", logout)
-	mux.HandleFunc("/signup", signup)
-	mux.HandleFunc("/sign_up", signupAccount)
-	mux.HandleFunc("/authenticate", authenticate)
-
-	mux.HandleFunc("/thread/new", newThread)
-	mux.HandleFunc("/thread/create", createThread)
-	mux.HandleFunc("/thread/post", postThread)
-	mux.HandleFunc("/thread/read", readThread)
-
-	server := &http.Server{
-		Addr:    "0.0.0.0:8080",
-		Handler: mux,
-	}
-	server.ListenAndServe()
+type user struct {
+	name  string
+	email string
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	files := []string{
-		"templates/layout.html",
-		"templates/navbar.html",
-		"templates/index.html",
-	}
+func (u *user) notify() {
+	fmt.Printf("Sending User Email To %s %s \n", u.name, u.email)
+}
 
-	templates := template.Must(template.ParseFiles(files...))
-	threads, err := data.Threads()
-	if err == nil {
-		templates.ExecuteTemplate(w, "layout", threads)
-	}
+func (u *user) changeEmail(email string) {
+	u.email = email
+}
+
+func main() {
+	bill := user{"Bill", "bill@gmail.com"}
+	bill.notify()
+
+	lisa := &user{"Lisa", "lisa@gmail.com"}
+	lisa.notify()
+
+	bill.changeEmail("bill@newdomain.com")
+	bill.notify()
+
+	lisa.changeEmail("lisa@contact.com")
+	lisa.notify()
 }
