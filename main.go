@@ -1,30 +1,49 @@
 package main
 
-import "fmt"
-
-type user struct {
-	name  string
-	email string
-}
-
-func (u *user) notify() {
-	fmt.Printf("Sending User Email To %s %s \n", u.name, u.email)
-}
-
-func (u *user) changeEmail(email string) {
-	u.email = email
-}
+import (
+	"fmt"
+	"runtime"
+	"sync"
+)
 
 func main() {
-	bill := user{"Bill", "bill@gmail.com"}
-	bill.notify()
+	// allocate 1 logical processor for the scheduler to use
+	runtime.GOMAXPROCS(1)
 
-	lisa := &user{"Lisa", "lisa@gmail.com"}
-	lisa.notify()
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	bill.changeEmail("bill@newdomain.com")
-	bill.notify()
+	fmt.Println("Start Gorountines")
 
-	lisa.changeEmail("lisa@contact.com")
-	lisa.notify()
+	go func() {
+		// Schedule the call to Done to tell main we are done
+		defer wg.Done()
+
+		// Display the alphabet 3 times
+		for count := 0; count < 3; count++ {
+			for char := 'A'; char < 'A'+26; char++ {
+				fmt.Printf("%c ", char)
+			}
+		}
+
+	}()
+
+	go func() {
+		// Schedule the call to Done to tell main we are done
+		defer wg.Done()
+
+		// Display the alphabet 3 times
+		for count := 0; count < 3; count++ {
+			for char := 'a'; char < 'a'+26; char++ {
+				fmt.Printf("%c ", char)
+			}
+		}
+
+	}()
+
+	// Wait for the gorountines to finish
+	fmt.Println("Waiting to finish")
+	wg.Wait()
+
+	fmt.Println("\nTerminating Program")
 }
