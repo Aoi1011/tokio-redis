@@ -1,7 +1,7 @@
 version: '3'
 services:
   my-app:
-    image: avichii1020/my-app:1.0
+    image: avichii1020/my-app:1.2
     ports:
      - 3000:3000
   mongodb:
