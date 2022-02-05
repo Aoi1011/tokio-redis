@@ -26,7 +26,7 @@ app.post('/update-profile', function (req, res) {
   MongoClient.connect("mongodb://admin:password@localhost:27017", function (err, client) {
     if (err) throw err;
 
-    var db = client.db('user-account');
+    var db = client.db('my-db');
     userObj['userid'] = 1;
     
     var myquery = { userid: 1 };
@@ -48,7 +48,7 @@ app.get('/get-profile', function (req, res) {
   MongoClient.connect("mongodb://admin:password@localhost:27017", function (err, client) {
     if (err) throw err;
 
-    var db = client.db('user-account');
+    var db = client.db('my-db');
 
     var myquery = { userid: 1 };
     
