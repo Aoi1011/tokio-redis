@@ -1,46 +1,83 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
-	"text/template"
+	"strings"
 )
 
-func main() {
-	mux := http.NewServeMux()
-	files := http.FileServer(http.Dir(config.Static))
-	mux.Handle("/static/", http.StripPrefix("/static/", files))
-
-	mux.HandleFunc("/", index)
-	mux.HandleFunc("/err", err)
-
-	mux.HandleFunc("/login", login)
-	mux.HandleFunc("/logout", logout)
-	mux.HandleFunc("/signup", signup)
-	mux.HandleFunc("/sign_up", signupAccount)
-	mux.HandleFunc("/authenticate", authenticate)
-
-	mux.HandleFunc("/thread/new", newThread)
-	mux.HandleFunc("/thread/create", createThread)
-	mux.HandleFunc("/thread/post", postThread)
-	mux.HandleFunc("/thread/read", readThread)
-
-	server := &http.Server{
-		Addr:    "0.0.0.0:8080",
-		Handler: mux,
-	}
-	server.ListenAndServe()
+type apiConfigData struct {
+	OpenWeatherMapApiKey string `json:"OpenWeatherMapApiKey"`
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	files := []string{
-		"templates/layout.html",
-		"templates/navbar.html",
-		"templates/index.html",
+type weatherData struct {
+	Name string `json:"name"`
+	Main struct {
+		Kelvin float64 `json:"temp"`
+	} `json:"main"`
+}
+
+func loadApiConfig(fileName string) (apiConfigData, error) {
+	bytes, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return apiConfigData{}, err
 	}
 
-	templates := template.Must(template.ParseFiles(files...))
-	threads, err := data.Threads()
-	if err == nil {
-		templates.ExecuteTemplate(w, "layout", threads)
+	var c apiConfigData
+
+	err = json.Unmarshal(bytes, &c)
+	if err != nil {
+		return apiConfigData{}, err
 	}
+
+	return c, nil
+}
+
+func hello(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("hello from go\n"))
+}
+
+func query(city string) (weatherData, error) {
+	var d weatherData
+
+	apiConfig, err := loadApiConfig(".apiConfig")
+	if err != nil {
+		return weatherData{}, err
+	}
+
+	resp, err := http.Get(
+		"http://api.openweathermap.org/data/2.5/weather?APPID=" +
+			apiConfig.OpenWeatherMapApiKey +
+			"&q" +
+			city)
+	if err != nil {
+		return weatherData{}, err
+	}
+
+	resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return weatherData{}, err
+	}
+
+	return d, nil
+}
+
+func main() {
+	http.HandleFunc("/hello", hello)
+
+	http.HandleFunc("/weather", func(w http.ResponseWriter, r *http.Request) {
+		city := strings.SplitN(r.URL.Path, "/", 3)[2]
+		data, err := query(city)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(data)
+	})
+
+	http.ListenAndServe(":8080", nil)
+
 }
