@@ -61,7 +61,7 @@ async fn main() {
             resp: resp_tx,
         };
 
-        tx2.send(cmd).await;
+        tx2.send(cmd).await.unwrap();
 
         let res = resp_rx.await;
         println!("GOT = {:?}", res);
