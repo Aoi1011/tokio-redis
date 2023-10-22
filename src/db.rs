@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use bytes::Bytes;
@@ -32,7 +33,7 @@ pub(crate) struct DbDropGuard {
 /// used to expire values after the requested duration has elapsed. The task
 /// runs until all instances of `Db` are dropped, at which point the task
 /// terminates.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Db {
     /// Handle to shared state. The background task will also have an
     /// `Arc<Shared>`.
@@ -99,12 +100,29 @@ struct Entry {
 }
 
 impl DbDropGuard {
+    /// Create a new `DbHolder`, wrapping a `Db` instance. When this is dropped
+    /// the `Db`'s purge task will be shut down.
     pub(crate) fn new() -> Self {
         DbDropGuard { db: Db::new() }
+    }
+
+    /// Get the shared database. Internally, this is an
+    /// `Arc`, so a clone only increments the ref count.
+    pub(crate) fn db(&self) -> Db {
+        self.db.clone()
+    }
+}
+
+impl Drop for DbDropGuard {
+    fn drop(&mut self) {
+        // Signal the 'Db' instance to shut down the task that purges expired keys
+        self.db.shutdown_purge_task();
     }
 }
 
 impl Db {
+    /// Create a new, empty, `Db` instance. Allocates shared state and spawns a
+    /// background task to manage key expiration.
     pub(crate) fn new() -> Self {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
@@ -116,9 +134,150 @@ impl Db {
             background_task: Notify::new(),
         });
 
+        // Start the background task.
         tokio::spawn(purge_expired_tasks(shared.clone()));
 
         Db { shared }
+    }
+
+    /// Get the value associated with a key
+    ///
+    /// Returns `None` if there is no value associated with the key. This may be
+    /// due to never having assigned a value to the kye or a previously assigned
+    /// value expired.
+    pub(crate) fn get(&self, key: &str) -> Option<Bytes> {
+        // Acquire the lock, get the entry and clone the value.
+        //
+        // Because data is stored using `Bytes`, a clone here is a shallow
+        // clone. Data is not copied.
+        let state = self.shared.state.lock().unwrap();
+        state.entries.get(key).map(|entry| entry.data.clone())
+    }
+
+    /// Set the value associated with a key along with an optional expiration
+    /// Duration.
+    ///
+    /// If a value is already associated with the key, it is removed.
+    pub(crate) fn set(&self, key: String, value: Bytes, expire: Option<Duration>) {
+        let mut state = self.shared.state.lock().unwrap();
+
+        // If this `set` becomes the key that expires **next**, the background
+        // task needs to be notified so it can update its state.
+        //
+        // Whether or not the task needs to be notified is computed during the
+        // `set` routine.
+        let mut notify = false;
+
+        let expires_at = expire.map(|duration| {
+            // `Instant` at which the key expires.
+            let when = Instant::now() + duration;
+
+            // Only notify the worker task if the newly inserted expiration is the
+            // **next** key to evict. In this case, the worker needs to be woken up
+            // to update its state.
+            notify = state
+                .next_expiration()
+                .map(|expiration| expiration > when)
+                .unwrap_or(true);
+
+            // Track the expiration.
+            state.expirations.insert((when, key.clone()));
+            when
+        });
+
+        // Insert the entry into the `HashMap`.
+        let prev = state.entries.insert(
+            key.clone(),
+            Entry {
+                data: value,
+                expires_at,
+            },
+        );
+
+        // If there was a value previously associated with the key **and** it
+        // had an expiration time. The associated entry in the `expirations` map
+        // must also be removed. This avoids leaking data.
+        if let Some(prev) = prev {
+            if let Some(when) = prev.expires_at {
+                state.expirations.remove(&(when, key));
+            }
+        }
+
+        // Release the mutex before notifying the background task. This helps
+        // reduce contention by avoiding the background task waking up only to
+        // be unable to acquire the mutex due to this function still holding it.
+        drop(state);
+
+        if notify {
+            // Finally, only notify the background task if it needs to update
+            // its state to reflect a new expiration.
+            self.shared.background_task.notify_one();
+        }
+    }
+
+    /// Returns a `Receiver` for the requested channel.
+    ///
+    /// The returned `Receiver` is used to receive values broadcast by `PUBLISH`
+    /// commands.
+    pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Bytes> {
+        use std::collections::hash_map::Entry;
+
+        // Acquire the mutex
+        let mut state = self.shared.state.lock().unwrap();
+
+        // If there is no entry for the requested channel, then create a new
+        // broadcast channel and associate it with the key. If one already
+        // exists, return an associated receiver.
+        match state.pub_sub.entry(key) {
+            Entry::Occupied(e) => e.get().subscribe(),
+            Entry::Vacant(e) => {
+                // No broadcast channel exists yet, so create one.
+                //
+                // The channel is created with a capacity of `1024` messages. A
+                // message is stored in the channle until **all** subscribers
+                // have seen it. This means that a slow subscriber could result
+                // in messages being held indefinitely.
+                //
+                // When the channel's capacity fills up, publishing will result
+                // in old messages being dropped. This prevents slow consumers
+                // from blocking the entire system.
+                let (tx, rx) = broadcast::channel(1024);
+                e.insert(tx);
+                rx
+            }
+        }
+    }
+
+    // Publish a message to the channel. Returns the number of subscribers listening on the
+    // channel.
+    pub(crate) fn publish(&self, key: &str, value: Bytes) -> usize {
+        let state = self.shared.state.lock().unwrap();
+
+        state
+            .pub_sub
+            .get(key)
+            // On a successful message send on the broadcast channel, the number
+            // of subscribers is returned An error indicates there are no 
+            // receivers, in which case, `0` should be returned. 
+            .map(|tx| tx.send(value).unwrap_or(0))
+            // If there is no entry for the channel key, then there are no
+            // subscribers. In this case, return `0`.  
+            .unwrap_or(0)
+    }
+
+    // Signals the purge background task to shut down. This is called by the 
+    // `DbShutdown`s `Drop` implementaion. 
+    fn shutdown_purge_task(&self) {
+        // The background task must be signaled to shut down. This is done by 
+        // setting `State::shutdown` to `true` and signalling the task. 
+        let mut state = self.shared.state.lock().unwrap();
+        state.shutdown = true;
+
+        // Drop the lock before signalling the background task. This helps 
+        // reduce lock contention by ensuring the background task doesn't 
+        // wake up only to be unable to acquire the mutex. 
+        drop(state);
+        self.shared.background_task.notify_one();
     }
 }
 
@@ -154,6 +313,15 @@ impl Shared {
     /// that the shared state can no longer be accessed.
     fn is_shutdown(&self) -> bool {
         self.state.lock().unwrap().shutdown
+    }
+}
+
+impl State {
+    fn next_expiration(&self) -> Option<Instant> {
+        self.expirations
+            .iter()
+            .next()
+            .map(|expiration| expiration.0)
     }
 }
 
