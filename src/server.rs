@@ -53,6 +53,7 @@ struct Listener {
     /// the broadcast::Sender. Each active connection received it, reaches a
     /// safe terminal state, and complete the task.
     notify_shutdown: broadcast::Sender<()>,
+
     shutdown_complete_tx: mpsc::Sender<()>,
 }
 
