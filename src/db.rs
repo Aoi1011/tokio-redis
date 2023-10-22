@@ -257,25 +257,25 @@ impl Db {
             .pub_sub
             .get(key)
             // On a successful message send on the broadcast channel, the number
-            // of subscribers is returned An error indicates there are no 
-            // receivers, in which case, `0` should be returned. 
+            // of subscribers is returned An error indicates there are no
+            // receivers, in which case, `0` should be returned.
             .map(|tx| tx.send(value).unwrap_or(0))
             // If there is no entry for the channel key, then there are no
-            // subscribers. In this case, return `0`.  
+            // subscribers. In this case, return `0`.
             .unwrap_or(0)
     }
 
-    // Signals the purge background task to shut down. This is called by the 
-    // `DbShutdown`s `Drop` implementaion. 
+    // Signals the purge background task to shut down. This is called by the
+    // `DbShutdown`s `Drop` implementaion.
     fn shutdown_purge_task(&self) {
-        // The background task must be signaled to shut down. This is done by 
-        // setting `State::shutdown` to `true` and signalling the task. 
+        // The background task must be signaled to shut down. This is done by
+        // setting `State::shutdown` to `true` and signalling the task.
         let mut state = self.shared.state.lock().unwrap();
         state.shutdown = true;
 
-        // Drop the lock before signalling the background task. This helps 
-        // reduce lock contention by ensuring the background task doesn't 
-        // wake up only to be unable to acquire the mutex. 
+        // Drop the lock before signalling the background task. This helps
+        // reduce lock contention by ensuring the background task doesn't
+        // wake up only to be unable to acquire the mutex.
         drop(state);
         self.shared.background_task.notify_one();
     }
