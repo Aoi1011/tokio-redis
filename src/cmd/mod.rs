@@ -42,19 +42,19 @@ impl Command {
         let command = match &command_name[..] {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
             _ => {
-                // The command is not recognized and an Unknown command is 
-                // returned. 
+                // The command is not recognized and an Unknown command is
+                // returned.
                 //
-                // `return` is called here to skip the `finish()` call below. As 
-                // the command is not recognized, there is most likey 
-                // unconsumed fields remaining in the `Parse` instance. 
+                // `return` is called here to skip the `finish()` call below. As
+                // the command is not recognized, there is most likey
+                // unconsumed fields remaining in the `Parse` instance.
                 return Ok(Command::Unknown(Unknown::new(command_name)));
             }
         };
 
-        // Check if there is any remaining unconsumed fields in the `Parse` 
-        // value. If fields remain, this indicates an unexpected frame format 
-        // and an error is returned. 
+        // Check if there is any remaining unconsumed fields in the `Parse`
+        // value. If fields remain, this indicates an unexpected frame format
+        // and an error is returned.
         parse.finish()?;
 
         // The comamnd has been successfully parsed
