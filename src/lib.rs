@@ -20,9 +20,9 @@ pub mod server;
 mod shutdown;
 use shutdown::Shutdown;
 
-/// Default port that a redis server listens on. 
+/// Default port that a redis server listens on.
 ///
-/// Used if no port is specified. 
+/// Used if no port is specified.
 pub const DEFAULT_PORT: u16 = 6379;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
