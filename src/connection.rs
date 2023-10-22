@@ -70,10 +70,10 @@ impl Connection {
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
             if self.stream.read_buf(&mut self.buffer).await? == 0 {
-                // The remote closed the connection. For this to be a clean 
-                // shutdown, there should be no data in the read buffer. If 
-                // there is, this means that the peer closed the socket while 
-                // sending a frame. 
+                // The remote closed the connection. For this to be a clean
+                // shutdown, there should be no data in the read buffer. If
+                // there is, this means that the peer closed the socket while
+                // sending a frame.
                 if self.buffer.is_empty() {
                     return Ok(None);
                 } else {
