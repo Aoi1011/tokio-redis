@@ -15,6 +15,7 @@ use crate::{db::Db, parse::Parse, shutdown::Shutdown, Connection, Frame};
 #[derive(Debug)]
 pub enum Command {
     Get(Get),
+    Set(Set),
     Unknown(Unknown),
 }
 
@@ -44,6 +45,7 @@ impl Command {
         // specific command.
         let command = match &command_name[..] {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
+            "set" => Command::Set(Set::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -78,6 +80,7 @@ impl Command {
 
         match self {
             Get(cmd) => cmd.apply(db, dst).await,
+            Set(cmd) => cmd.apply(db, dst).await,
             Unknown(cmd) => cmd.apply(dst).await,
         }
     }
@@ -86,6 +89,7 @@ impl Command {
     pub(crate) fn get_name(&self) -> &str {
         match self {
             Command::Get(_) => "get",
+            Command::Set(_) => "set",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

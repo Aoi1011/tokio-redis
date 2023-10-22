@@ -4,7 +4,10 @@ use bytes::Bytes;
 use tokio::net::{TcpStream, ToSocketAddrs};
 use tracing::debug;
 
-use crate::{cmd::Get, Connection, Frame};
+use crate::{
+    cmd::{Get, Set},
+    Connection, Frame,
+};
 
 pub struct Client {
     connection: Connection,
@@ -45,6 +48,23 @@ impl Client {
 
         match self.read_response().await? {
             Frame::Simple(val) => Ok(Some(val.into())),
+            frame => Err(frame.to_error()),
+        }
+    }
+
+    pub async fn set(&mut self, key: &str, value: Bytes) -> crate::Result<()> {
+        self.set_cmd(Set::new(key, value, None)).await
+    }
+
+    async fn set_cmd(&mut self, cmd: Set) -> crate::Result<()> {
+        let frame = cmd.into_frame();
+
+        debug!(request = ?frame);
+
+        self.connection.write_frame(&frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(res) if res == "OK" => Ok(()),
             frame => Err(frame.to_error()),
         }
     }

@@ -5,6 +5,7 @@ use tracing::debug;
 
 use crate::{db::Db, parse::Parse, Connection, Frame};
 
+#[derive(Debug)]
 pub struct Set {
     key: String,
     value: Bytes,
