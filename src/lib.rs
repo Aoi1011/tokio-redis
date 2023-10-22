@@ -15,6 +15,8 @@ mod parse;
 use parse::Parse;
 use parse::ParseError;
 
+pub mod server;
+
 mod shutdown;
 use shutdown::Shutdown;
 

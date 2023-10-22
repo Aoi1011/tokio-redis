@@ -69,7 +69,7 @@ impl Command {
         self,
         db: &Db,
         dst: &mut Connection,
-        _shutdown: Shutdown,
+        _shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
         use Command::*;
 
