@@ -27,7 +27,7 @@ pub(crate) struct DbDropGuard {
 /// `broadcast::Sender` values for active pub/sub channels.
 ///
 /// A `Db` instance is a handle to shared state. Cloning `Db` is shallow and
-/// only incurs an atomic ref cound increment.
+/// only incurs an atomic ref count increment.
 ///
 /// When a `Db` value is created, a background task is spawned. This task is
 /// used to expire values after the requested duration has elapsed. The task
