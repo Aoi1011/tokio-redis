@@ -1,6 +1,10 @@
 use std::io;
 
-use tokio::{self, net::TcpListener, io::{AsyncWriteExt, AsyncReadExt}};
+use tokio::{
+    self,
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -27,5 +31,4 @@ async fn main() -> io::Result<()> {
             }
         });
     }
-
 }

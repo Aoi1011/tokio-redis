@@ -13,7 +13,7 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
 
     println!("Listening...");
-    
+
     let db = Arc::new(Mutex::new(HashMap::new()));
 
     loop {
@@ -52,4 +52,3 @@ async fn process(socket: TcpStream, db: DB) {
         connection.write_frame(&response).await.unwrap();
     }
 }
-

@@ -224,7 +224,7 @@ impl Connection {
     async fn write_decimal(&mut self, val: u64) -> io::Result<()> {
         use std::io::Write;
 
-        // Convert the value to a string 
+        // Convert the value to a string
         let mut buf = [0u8; 20];
         let mut buf = Cursor::new(&mut buf[..]);
         write!(&mut buf, "{}", val)?;

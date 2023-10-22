@@ -8,6 +8,10 @@ mod db;
 use db::Db;
 use db::DbDropGuard;
 
+mod parse;
+use parse::Parse;
+use parse::ParseError;
+
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 /// A specialized `Result` type for mini-redis operations
