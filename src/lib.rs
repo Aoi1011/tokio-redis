@@ -1,3 +1,5 @@
+pub mod clients;
+
 pub mod cmd;
 pub use cmd::Command;
 
