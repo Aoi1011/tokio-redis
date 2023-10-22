@@ -147,20 +147,38 @@ impl Connection {
         }
     }
 
+    /// Write a single `Frame` value to the underlying stream.
+    ///
+    /// The `Frame` value is written to the socket using the various `write_*`
+    /// functions provided by `AsyncWrite`. Calling these functions directly on
+    /// a `TcpStream` is **not** advised, as this will result in a large number of
+    /// syscalls. However, it is fine to call these functions on a *buffered*
+    /// write stream. The data will be written to the buffer. Once the buffer is
+    /// full, it is flushed to the underlying socket.
     pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+        // Arrays are encoded by encoding each entry. All other frame types are
+        // considered literals. For now, mini-redis is not able to encode
+        // recursive frame structures. See below for more details.
         match frame {
             Frame::Array(val) => {
+                // Encode the frame type prefix. For an array, it is `*`.
                 self.stream.write_u8(b'*').await?;
 
+                // Encode the length of the array. 
                 self.write_decimal(val.len() as u64).await?;
 
+                // Iterate and encode each entry in the array. 
                 for entry in &**val {
                     self.write_value(entry).await?;
                 }
             }
+            // The frame type is a literail. Encode the value directly. 
             _ => self.write_value(frame).await?,
         }
 
+        // Ensure the encoded frame is written to the socket. The calls above 
+        // are to the buffered stream and writes. Calling `flush` writes the 
+        // remaining contents of the buffer to the socket. 
         self.stream.flush().await
     }
 
