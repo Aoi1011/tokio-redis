@@ -48,6 +48,8 @@ impl Client {
 
         match self.read_response().await? {
             Frame::Simple(val) => Ok(Some(val.into())),
+            Frame::Bulk(val) => Ok(Some(val)),
+            Frame::Null => Ok(None),
             frame => Err(frame.to_error()),
         }
     }
@@ -56,13 +58,19 @@ impl Client {
         self.set_cmd(Set::new(key, value, None)).await
     }
 
+    /// The core `SET` logic, used by both `set` and `set_expires.
     async fn set_cmd(&mut self, cmd: Set) -> crate::Result<()> {
+        // Convert the `Set` command into a frame
         let frame = cmd.into_frame();
 
         debug!(request = ?frame);
 
+        // Write the frame to the socket. This writes the full frame to the
+        // socket, waiting if necessary.
         self.connection.write_frame(&frame).await?;
 
+        // Wait for the response from the server. On success, the server
+        // responds simply with `OK`. Any other response indicates an error.
         match self.read_response().await? {
             Frame::Simple(res) if res == "OK" => Ok(()),
             frame => Err(frame.to_error()),
