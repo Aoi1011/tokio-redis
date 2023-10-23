@@ -19,6 +19,7 @@ use crate::{db::Db, parse::Parse, shutdown::Shutdown, Connection, Frame};
 pub enum Command {
     Get(Get),
     Set(Set),
+    Ping(Ping),
     Unknown(Unknown),
 }
 
@@ -49,6 +50,7 @@ impl Command {
         let command = match &command_name[..] {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
             "set" => Command::Set(Set::parse_frames(&mut parse)?),
+            "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
                 // returned.
@@ -84,6 +86,9 @@ impl Command {
         match self {
             Get(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
+            Ping(cmd) => cmd.apply(dst).await,
+            // `Unsubscribe` cannot be applie. it may only be received from the 
+            // context of a `Subscribe` command. 
             Unknown(cmd) => cmd.apply(dst).await,
         }
     }
@@ -93,6 +98,7 @@ impl Command {
         match self {
             Command::Get(_) => "get",
             Command::Set(_) => "set",
+            Command::Ping(_) => "ping",
             Command::Unknown(cmd) => cmd.get_name(),
         }
     }

@@ -5,7 +5,7 @@ use tokio::net::{TcpStream, ToSocketAddrs};
 use tracing::debug;
 
 use crate::{
-    cmd::{Get, Set},
+    cmd::{Get, Ping, Set},
     Connection, Frame,
 };
 
@@ -34,9 +34,17 @@ impl Client {
     }
 
     pub async fn ping(&mut self, msg: Option<Bytes>) -> crate::Result<Bytes> {
-        // let frame =
-        //
-        Ok(Bytes::new())
+        let frame = Ping::new(msg).into_frame();
+
+        debug!(request = ?frame);
+
+        self.connection.write_frame(&frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(val) => Ok(val.into()),
+            Frame::Bulk(val) => Ok(val),
+            frame => Err(frame.to_error()),
+        }
     }
 
     pub async fn get(&mut self, key: &str) -> crate::Result<Option<Bytes>> {
