@@ -4,6 +4,9 @@ pub use get::Get;
 mod set;
 pub use set::Set;
 
+mod ping;
+pub use ping::Ping;
+
 mod unknown;
 pub use unknown::Unknown;
 
