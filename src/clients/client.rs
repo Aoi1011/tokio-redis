@@ -1,3 +1,7 @@
+//! Minimal Redis client implementaion
+//!
+//! Provides an async connect and methods for issuing the supported commands.
+
 use std::io::{Error, ErrorKind};
 
 use bytes::Bytes;
@@ -9,15 +13,38 @@ use crate::{
     Connection, Frame,
 };
 
+/// Established connection with a Redis server.
+///
+/// Backed by a single `TcpStream`, `Client` provides basic network client
+/// functionally (no pooling, retrying, ...). Connections are established using
+/// the [`connect`](fn@connect) function.
+///
+/// Requests are issued using the various methods of `CLient`.
 pub struct Client {
+    /// The TCP connection decorated with the redis protocol encoder / decoder
+    /// implemented using a bufered `TcpStream`.
+    ///
+    /// When `Listener` receives an inbound connection, the `TcpStream` is
+    /// passed to `Connection::new`, which initializes the associated buffers.
+    /// `Connection` allows the handler to operate at the "frame" level and keep
+    /// the byte level protocol parsing details encapsulated in `Connection`.
     connection: Connection,
 }
 
+/// A client that has entered pub/sub mode.
+///
+/// Once clients subscribe to a channel, they mey only perform pub/sub related
+/// commands. The `Client` type is transitioned to a `Subscriber` type in order
+/// to prevent non-pub/sub methods from being called.
 pub struct Subscriber {
+    /// The subscribed client.
     client: Client,
+
+    /// The set of channels to which the `Subscriber` is currently subscribed.
     subscribed_channels: Vec<String>,
 }
 
+/// A message received on a subscribed channel.
 #[derive(Debug, Clone)]
 pub struct Message {
     pub channel: String,
@@ -33,6 +60,29 @@ impl Client {
         Ok(Client { connection })
     }
 
+    /// Ping to the server.
+    ///
+    /// Returns PONG if no argument is provided, otherwise
+    /// return a copy of the argument as a bulk.
+    ///
+    /// This command is often used to test if a connection
+    /// is still alive, or to measure latency.
+    ///
+    /// # Examples
+    ///
+    /// Demonstrates basic usage.
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = Client::connect("127.0.0.1:6379").await.unwrap();
+    ///
+    ///     let pong = client.ping(None).await.unwrap();
+    ///
+    ///     assert_eq!(b"PONG", &pong[..]);
+    /// }
+    /// ```
     pub async fn ping(&mut self, msg: Option<Bytes>) -> crate::Result<Bytes> {
         let frame = Ping::new(msg).into_frame();
 
