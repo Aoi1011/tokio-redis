@@ -70,12 +70,43 @@ struct Listener {
 /// Per-connection handler. Reads requets from `connection` and applies the commands to `db`.
 #[derive(Debug)]
 struct Handler {
+    /// Shared database handle.
+    ///
+    /// When a command is received from `connection`, it applied with `db`.
+    /// The implementation of the command is in the `cmd` module. Each command
+    /// will need to interact with `db` in order to complete the work.
     db: Db,
+
+    /// The TCP connection decorated with the redis protocol encoder / decoder
+    /// implemented using a buffered `TcpStream`.
+    ///
+    /// When `Listener` receives an inbound connection, the `TcpStream` is
+    /// passed to `Connection::new`, which intializes the associated buffers.
+    /// `Connection` allows the handler to operate at the "frame" level and keep
+    /// the byte level protocol parsing details encapsulated in `Connection`.
     connection: Connection,
+
+    /// Listen for shutdown notifications. 
+    ///
+    /// A wrapper around the `broadcast::Receiver` paired with the sender in 
+    /// `Listener`. The connection handler processes requests from the 
+    /// connections until the peer diconnects **or** a shutdown notification is 
+    /// received from `shutdown`. In the latter case, any in-flight work being 
+    /// processed for the peer is continued until it reaches a safe state, at 
+    /// which port the connection is terminated. 
     shutdown: Shutdown,
+
+    /// Not used directly. Instead, when `Handler` is dropped...?
     shutdown_complete_tx: mpsc::Sender<()>,
 }
 
+/// Maximum number of concurrent connectiosn the redis server will accept. 
+///
+/// When this limit is reached, the server will stop accepting connections until 
+/// an active connection terminates. 
+///
+/// A real application will want to make this value configurable, but for this 
+/// example, it is hard coded. 
 const MAX_CONNECTIONS: usize = 250;
 
 pub async fn run(listener: TcpListener, shutdown: impl Future) {
