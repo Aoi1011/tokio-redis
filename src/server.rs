@@ -171,26 +171,26 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
         }
     }
 
-    // Extract the `shutdown_complete` receiver and transmitter 
-    // explicitly drop `shutdown_transmitter`. This is important, as the 
-    // `.await` below would otherwise never complete. 
+    // Extract the `shutdown_complete` receiver and transmitter
+    // explicitly drop `shutdown_transmitter`. This is important, as the
+    // `.await` below would otherwise never complete.
     let Listener {
         notify_shutdown,
         shutdown_complete_tx,
         ..
     } = server;
 
-    // When `notify_shutdown` is dropped, all tasks which have `subscribed`d will 
+    // When `notify_shutdown` is dropped, all tasks which have `subscribed`d will
     // receive the shutdown signal and can exit
     drop(notify_shutdown);
 
-    // Drop final `Sender` so the `Receiver` below can complete. 
+    // Drop final `Sender` so the `Receiver` below can complete.
     drop(shutdown_complete_tx);
 
-    // Wait for all active connections to finish processing. As the `Sender` 
-    // handle held by the listener has been dropped above, the only remaining 
-    // `Sender` instances are held by connection handler tasks. When those drop, 
-    // the `mpsc` channel will close and `recev()` will return `None`. 
+    // Wait for all active connections to finish processing. As the `Sender`
+    // handle held by the listener has been dropped above, the only remaining
+    // `Sender` instances are held by connection handler tasks. When those drop,
+    // the `mpsc` channel will close and `recev()` will return `None`.
     let _ = shutdown_complete_rx.recv().await;
 }
 
