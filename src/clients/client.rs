@@ -52,9 +52,36 @@ pub struct Message {
 }
 
 impl Client {
+    /// Establish a connection with the Redis server located at `addr`.
+    ///
+    /// `addr` may be any type that can be asynchronously converted to a
+    /// `SocketAddr`. This includes `SocketAddr` and strings. The `ToSocketAddrs`
+    /// trait is the Tokio version and not the `std` version.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = match Client::connect("localhost:6379").await {
+    ///         Ok(client) => client,
+    ///         Err(_) => panic!("failed to establish connection"),
+    ///     };
+    ///
+    ///     // drop(client);
+    /// }
+    /// ```
     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Client> {
+        // The `addr` argument is passed directly to `TcpStream::connect`. This 
+        // performs any asynchrnous DNS lookup and attemps to establish the TCP 
+        // connection. An error at either step returns an error, which is then 
+        // bubbled up to the caller of `mini_redis` connect. 
         let socket = TcpStream::connect(addr).await?;
 
+        // Initialize the connection state. This allocates read/write buffers to 
+        // perform redis protocol frame parsing. 
         let connection = Connection::new(socket);
 
         Ok(Client { connection })

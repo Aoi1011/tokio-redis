@@ -54,9 +54,20 @@ struct Listener {
     /// safe terminal state, and complete the task.
     notify_shutdown: broadcast::Sender<()>,
 
+    /// Used as part of the graceful shutdown process to wait for client
+    /// connections to complete processing.
+    ///
+    /// Tokio channels are closed once all `Sender` handles go out of scope.
+    /// When a channel is closed, the receiver receives `None`. This is
+    /// leveraged to detect all connection handlers completing. When a
+    /// connection handler is initialized, it is assigned a clone of
+    /// `shutdown_complete_tx`. When the listener shuts down, it drops the sender held by this
+    /// `shutdown_complete_rx.recv()` completing with `None`. At this point, it is safe to exit the
+    /// server process.
     shutdown_complete_tx: mpsc::Sender<()>,
 }
 
+/// Per-connection handler. Reads requets from `connection` and applies the commands to `db`.
 #[derive(Debug)]
 struct Handler {
     db: Db,
