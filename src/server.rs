@@ -264,45 +264,96 @@ impl Listener {
         }
     }
 
+    /// Accept an inbound connection.
+    ///
+    /// Errors are handled by backing off and retrying. An exponential backoff
+    /// strategy is used. After the first failure, the task waits for 1 second.
+    /// After the second failure, the task waits for 2 seconds. Each subsequent failure doubles the
+    /// wait time. If accepting fails on the 6th try after wariting for 64 seconds, then this
+    /// function returns with an error.
     async fn accept(&mut self) -> crate::Result<TcpStream> {
         let mut backoff = 1;
 
+        // Try to accept a few times
         loop {
+            // Perform the accept operation. If a socket is successfully
+            // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
                 Ok((socket, _)) => return Ok(socket),
                 Err(err) => {
                     if backoff > 64 {
+                        // Accept has failed too many times, Return the error.
                         return Err(err.into());
                     }
                 }
             }
 
+            // Pause execution until the backoff period elapses.
             time::sleep(Duration::from_secs(backoff)).await;
 
+            // Double the back off
             backoff *= 2;
         }
     }
 }
 
 impl Handler {
+    /// Process a single connection.
+    ///
+    /// Request frames are read from the socket and processed. Responses are
+    /// written back to the socket.
+    ///
+    /// Currently, pipelining is not implemented. Pipelining is the ability to
+    /// process more than one request concurrenctly per connection without
+    /// interleaving frames. See for more details:
+    /// https://redis.io/topics/pipelining
+    ///
+    /// When the shutdown signal is received, the connection is processed until
+    /// it reaches a safe state, at which point it is terminated.
     async fn run(&mut self) -> crate::Result<()> {
+        // As long as the shutdown signal has not been received, try to read a
+        // new request frame.
         while !self.shutdown.is_shutdown() {
+            // While reading a request signal has not been received, try to read a
+            // new request frame.
             let maybe_frame = tokio::select! {
                 res = self.connection.read_frame() => res?,
                 _ = self.shutdown.recv() => {
+                    // If a shutdown signal is received, return from `run`.
+                    // This will result in the task terminating.
                     return Ok(());
                 }
             };
 
+            // If `None` is returned from `read_frame()` then the peer closed
+            // the socket. There is no further work to do and the task can be
+            // terminated.
             let frame = match maybe_frame {
                 Some(frame) => frame,
                 None => return Ok(()),
             };
 
+            // Convert the redis frame into a comand struct. This returns an error if the frame is
+            // not a valid redis command or it is an unsupported command.
             let cmd = Command::from_frame(frame)?;
 
+            // Log the `cmd` object. The syntax here is a shorthand provided by the `tracing`
+            // crate. It can be thought of as similar to:
+            //
+            // ```
+            // debug!(cmd = format!("{:?}", cmd);
+            // ```
+            //
+            // `tracing` provides structured logging, so information is "logged" as key-value
+            // pairs.
             debug!(?cmd);
 
+            // Perform the work needed to apply the command. This may mutate the database state as
+            // a result.
+            //
+            // The connection is passed into the apply function which allows the command to write
+            // response frames directly to the connection. In the case of pub/sub, multiple frames
+            // may be send back to the peer.
             cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
                 .await?;
         }
