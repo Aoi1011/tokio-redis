@@ -87,8 +87,8 @@ impl Command {
             Get(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
             Ping(cmd) => cmd.apply(dst).await,
-            // `Unsubscribe` cannot be applie. it may only be received from the 
-            // context of a `Subscribe` command. 
+            // `Unsubscribe` cannot be applie. it may only be received from the
+            // context of a `Subscribe` command.
             Unknown(cmd) => cmd.apply(dst).await,
         }
     }

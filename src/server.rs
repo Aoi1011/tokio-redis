@@ -195,10 +195,32 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
 }
 
 impl Listener {
+    /// Run the server
+    ///
+    /// Listen for inbound connections. For each inbound connection, spawn a
+    /// task to process that connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if accepting returns an error. This can happen for a
+    /// number reasons that resolve over time. For example, if the underlying
+    /// operating sytem has reached an internal limit for max number of
+    /// sockets, accept will fail.
+    ///
+    /// The process is not able to detect when a transient error resolves
+    /// itself. One strategy for handling this is to implement a back off
+    /// strategy, which is what we do here.
     async fn run(&mut self) -> crate::Result<()> {
         info!("accepting inbound connections");
 
         loop {
+            // Wait for a permit to become avaialble
+            //
+            // `acquire_owned` returns a permit that is bound to the semaphore.
+            // When the permit value is dropped, it is automatically returned to the semaphore.
+            //
+            // `acquire_owned()` returns `Err` when the semaphore has been
+            // closed. We don't ever close the semaphore, so `unwrap()` is safe.
             let permit = self
                 .limit_connections
                 .clone()
@@ -206,20 +228,37 @@ impl Listener {
                 .await
                 .unwrap();
 
+            // Accept a new socket. This will attempt to perform erro handling.
+            // The `accept` method internally attempts to recover errors, so an
+            // error here is non-recoverable.
             let socket = self.accept().await?;
 
+            // Create the necessary per-connection handler state.
             let mut handler = Handler {
+                // Get a handle to the shared database.
                 db: self.db_holder.db(),
+
+                // Initialize the connection state. This allocates read/write
+                // buffers to perform redis protocol frame parsing.
                 connection: Connection::new(socket),
+
+                // Receive shutdown notification.
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+
+                // Notifies the receiver half once all clones are dropped.
                 shutdown_complete_tx: self.shutdown_complete_tx.clone(),
             };
 
+            // Spawn a new task to process the connections. Tokio tasks are like
+            // asynchronous green threads and are executed concurrently.
             tokio::spawn(async move {
+                // Process the connection. If an error is encountered, log it.
                 if let Err(err) = handler.run().await {
                     error!(cause = ?err, "connection error");
                 }
 
+                // Move the permit into the task and drop it after completion.
+                // This returns the permit back to the semaphore.
                 drop(permit);
             });
         }
