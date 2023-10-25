@@ -21,6 +21,7 @@ use crate::{db::Db, parse::Parse, shutdown::Shutdown, Connection, Frame};
 #[derive(Debug)]
 pub enum Command {
     Get(Get),
+    Publish(Publish),
     Set(Set),
     Ping(Ping),
     Unknown(Unknown),
@@ -52,6 +53,7 @@ impl Command {
         // specific command.
         let command = match &command_name[..] {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
+            "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             "set" => Command::Set(Set::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
             _ => {
@@ -88,6 +90,7 @@ impl Command {
 
         match self {
             Get(cmd) => cmd.apply(db, dst).await,
+            Publish(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
             Ping(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applie. it may only be received from the
@@ -100,6 +103,7 @@ impl Command {
     pub(crate) fn get_name(&self) -> &str {
         match self {
             Command::Get(_) => "get",
+            Command::Publish(_) => "publish",
             Command::Set(_) => "set",
             Command::Ping(_) => "ping",
             Command::Unknown(cmd) => cmd.get_name(),

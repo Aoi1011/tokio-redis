@@ -6,10 +6,10 @@ use std::io::{Error, ErrorKind};
 
 use bytes::Bytes;
 use tokio::net::{TcpStream, ToSocketAddrs};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
-    cmd::{Get, Ping, Set},
+    cmd::{Get, Ping, Publish, Set},
     Connection, Frame,
 };
 
@@ -158,6 +158,44 @@ impl Client {
         // responds simply with `OK`. Any other response indicates an error.
         match self.read_response().await? {
             Frame::Simple(res) if res == "OK" => Ok(()),
+            frame => Err(frame.to_error()),
+        }
+    }
+
+    /// Posts `message` to the given `channel`.
+    ///
+    /// Returns the number of subscribers currently listening on the channel.
+    /// There is no gurantee that these subscribers receive the message as they
+    /// may diconnect at any time.
+    ///
+    /// # Examples
+    ///
+    /// Demonstrate basic usage.
+    ///
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    ///
+    /// #[tokio::main]
+    /// pub async fn main() {
+    ///     let mut client = Client::connect("localhost:6379").await.unwrap();
+    ///
+    ///     let val = client.publish("foo", "bar".into()).await.unwrap();
+    ///     println!("Got = {:?}", val);
+    /// }
+    /// ```
+    #[instrument(skip(self))]
+    pub async fn publish(&mut self, channel: &str, message: Bytes) -> crate::Result<u64> {
+        // Convert the `Publish` command into a frame
+        let frame = Publish::new(channel, message).into_frame();
+
+        debug!(request = ?frame);
+
+        // Write the frame to the socket
+        self.connection.write_frame(&frame).await?;
+
+        // Read the response
+        match self.read_response().await? {
+            Frame::Integer(res) => Ok(res),
             frame => Err(frame.to_error()),
         }
     }
