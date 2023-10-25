@@ -248,8 +248,8 @@ impl Db {
         }
     }
 
-    // Publish a message to the channel. Returns the number of subscribers listening on the
-    // channel.
+    /// Publish a message to the channel. Returns the number of subscribers listening on the
+    /// channel.
     pub(crate) fn publish(&self, key: &str, value: Bytes) -> usize {
         let state = self.shared.state.lock().unwrap();
 
