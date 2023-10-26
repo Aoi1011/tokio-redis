@@ -10,8 +10,9 @@ name = "mini-redis-server"
 path = "src/bin/server.rs"
 
 [dependencies]
-tokio = { version = "1", features = ["full"]}
-bytes = "1"
 atoi = "2.0.0"
-tracing = "0.1.34"
+bytes = "1"
 clap = { version = "4.4.6", features = ["derive"] }
+tokio = { version = "1", features = ["full"]}
+tokio-stream =  "0.1"
+tracing = "0.1.34"

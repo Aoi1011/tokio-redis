@@ -7,6 +7,9 @@ pub use publish::Publish;
 mod set;
 pub use set::Set;
 
+mod subscribe;
+pub use subscribe::Subscribe;
+
 mod ping;
 pub use ping::Ping;
 
