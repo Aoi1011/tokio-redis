@@ -8,7 +8,7 @@ mod set;
 pub use set::Set;
 
 mod subscribe;
-pub use subscribe::Subscribe;
+pub use subscribe::{Subscribe, Unsubscribe};
 
 mod ping;
 pub use ping::Ping;
@@ -26,6 +26,8 @@ pub enum Command {
     Get(Get),
     Publish(Publish),
     Set(Set),
+    Subscribe(Subscribe),
+    Unsubscribe(Unsubscribe),
     Ping(Ping),
     Unknown(Unknown),
 }
@@ -58,6 +60,8 @@ impl Command {
             "get" => Command::Get(Get::parse_frames(&mut parse)?),
             "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             "set" => Command::Set(Set::parse_frames(&mut parse)?),
+            "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
+            "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
             "ping" => Command::Ping(Ping::parse_frames(&mut parse)?),
             _ => {
                 // The command is not recognized and an Unknown command is
@@ -87,7 +91,7 @@ impl Command {
         self,
         db: &Db,
         dst: &mut Connection,
-        _shutdown: &mut Shutdown,
+        shutdown: &mut Shutdown,
     ) -> crate::Result<()> {
         use Command::*;
 
@@ -95,10 +99,12 @@ impl Command {
             Get(cmd) => cmd.apply(db, dst).await,
             Publish(cmd) => cmd.apply(db, dst).await,
             Set(cmd) => cmd.apply(db, dst).await,
+            Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
+            Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applie. it may only be received from the
             // context of a `Subscribe` command.
-            Unknown(cmd) => cmd.apply(dst).await,
+            Unsubscribe(_) => Err("`Unsubscribe` is unsupported in this context".into()),
         }
     }
 
@@ -106,8 +112,10 @@ impl Command {
     pub(crate) fn get_name(&self) -> &str {
         match self {
             Command::Get(_) => "get",
-            Command::Publish(_) => "publish",
+            Command::Publish(_) => "pub",
             Command::Set(_) => "set",
+            Command::Subscribe(_) => "subscribe",
+            Command::Unsubscribe(_) => "unsubscribe",
             Command::Ping(_) => "ping",
             Command::Unknown(cmd) => cmd.get_name(),
         }
