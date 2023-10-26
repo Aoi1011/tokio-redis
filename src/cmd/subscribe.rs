@@ -1,9 +1,9 @@
 use std::pin::Pin;
 
 use bytes::Bytes;
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamMap};
 
-use crate::parse::Parse;
+use crate::{db::Db, parse::Parse, shutdown::Shutdown, Connection};
 
 /// Subscribes the client to one or more channels.
 ///
@@ -82,4 +82,30 @@ impl Subscribe {
 
         Ok(Subscribe { channels })
     }
+
+    pub(crate) async fn apply(
+        mut self,
+        db: &Db,
+        dst: &mut Connection,
+        shutdown: &mut Shutdown,
+    ) -> crate::Result<()> {
+        let mut subscriptions = StreamMap::new();
+
+        loop {
+            for channel_name in self.channels.drain(..) {}
+        }
+        Ok(())
+    }
+}
+
+async fn subscribe_to_channel(
+    channel_name: String,
+    subscriptions: &mut StreamMap<String, Message>,
+    db: &Db,
+    dst: &mut Connection,
+) -> crate::Result<()> {
+    let mut rx = db.subscribe(channel_name.clone());
+
+    let rx = Box::pin(async_stream);
+    Ok(())
 }
