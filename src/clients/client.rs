@@ -2,7 +2,10 @@
 //!
 //! Provides an async connect and methods for issuing the supported commands.
 
-use std::io::{Error, ErrorKind};
+use std::{
+    io::{Error, ErrorKind},
+    time::Duration,
+};
 
 use bytes::Bytes;
 use tokio::net::{TcpStream, ToSocketAddrs};
@@ -124,6 +127,26 @@ impl Client {
         }
     }
 
+    /// Get the value of key.
+    ///
+    /// If the key does not exist the special value `None` is returned.
+    ///
+    /// # Examples
+    ///
+    /// Demonstrates basic usage.
+    ///
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = Client::connect("localhost:6379").await.unwrap();
+    ///
+    ///     let val = client.get("foo").await.unwrap();
+    ///     println!("Got = {:?}", val);
+    /// }
+    /// ```
+    #[instrument(skip(self))]
     pub async fn get(&mut self, key: &str) -> crate::Result<Option<Bytes>> {
         let frame = Get::new(key).into_frame();
 
@@ -139,8 +162,85 @@ impl Client {
         }
     }
 
+    /// Set `key` to hold the given `value`.
+    ///
+    /// The `value` is associated with `key` until it is overwritten by the next
+    /// call to `set` or it is removed.
+    ///
+    /// If key already holds a value, it is overwritten. Any previous time to
+    /// live associated with the key is discarded on successful SET operation.
+    ///
+    /// # Examples
+    ///
+    /// Demonstrates basic usage.
+    ///
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = Client::connect("localhost:6379").await.unwrap();
+    ///
+    ///     client.set("foo", "bar".into()).await.unwrap();
+    ///
+    ///     // Getting the value immediately works
+    ///     let val = client.get("foo").await.unwrap().unwrap();
+    ///     assert_eq!(val, "bar");
+    /// }
+    /// ```
+    #[instrument(skip(self))]
     pub async fn set(&mut self, key: &str, value: Bytes) -> crate::Result<()> {
         self.set_cmd(Set::new(key, value, None)).await
+    }
+
+    /// Set `key` to hold the given `value`. The value expires after `expiration`
+    ///
+    /// The `value` is associated with `key` until one of the following:
+    /// - it expires.
+    /// - it is overwritten by the next call to `set`.
+    /// - it is removed.
+    ///
+    /// If key already holds a value, it is overwritten. Any previous time to
+    /// live associated with the key is discarded on a successful SET operation.
+    ///
+    /// # Examples
+    ///
+    /// Demonstrates basic usage. This example is not **guaranteed** to always
+    /// work as it relies on time based logic and assumes the client and server
+    /// stay relatively synchronized in time. The real world tends to not be so
+    /// favorable.
+    ///
+    /// ```no_run
+    /// use mini_redis::clients::Client;
+    /// use tokio::time;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let ttl = Duration::from_millis(500);
+    ///     let mut client = Client::connect("localhost:6379").await.unwrap();
+    ///
+    ///     client.set_expires("foo", "bar".into(), ttl).await.unwrap();
+    ///
+    ///     // Getting the value immediately works
+    ///     let val = client.get("foo").await.unwrap().unwrap();
+    ///     assert_eq!(val, "bar");
+    ///
+    ///     // Wait for the TTL to expire
+    ///     time::sleep(ttl).await;
+    ///
+    ///     let val = client.get("foo").await.unwrap();
+    ///     assert!(val.is_some());
+    /// }
+    /// ```
+    #[instrument(skip(self))]
+    pub async fn set_expires(
+        &mut self,
+        key: &str,
+        value: Bytes,
+        expiration: Duration,
+    ) -> crate::Result<()> {
+        self.set_cmd(Set::new(key, value, Some(expiration))).await
     }
 
     /// The core `SET` logic, used by both `set` and `set_expires.
@@ -200,6 +300,9 @@ impl Client {
         }
     }
 
+    /// Read a response frame from the socket.
+    ///
+    /// If an `Err` frame is received, it is converted to `Err`.
     async fn read_response(&mut self) -> crate::Result<Frame> {
         let res = self.connection.read_frame().await?;
 
@@ -209,6 +312,9 @@ impl Client {
             Some(Frame::Error(msg)) => Err(msg.into()),
             Some(frame) => Ok(frame),
             None => {
+                // Receving `None` here indicates the server has closed the
+                // connection without sending a frame. This is unexpected and is represented as a
+                // "connection reset by peer" error.
                 let err = Error::new(ErrorKind::ConnectionReset, "connection reset by server");
 
                 Err(err.into())
