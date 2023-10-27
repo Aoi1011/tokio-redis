@@ -33,15 +33,13 @@ pub mod frame;
 pub use frame::Frame;
 
 mod db;
-use db::{Db, DbDropGuard};
 
 mod parse;
-use parse::{Parse, ParseError};
+use parse::ParseError;
 
 pub mod server;
 
 mod shutdown;
-use shutdown::Shutdown;
 
 /// Default port that a redis server listens on.
 ///
