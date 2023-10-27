@@ -12,7 +12,7 @@ use tokio::net::{TcpStream, ToSocketAddrs};
 use tracing::{debug, instrument};
 
 use crate::{
-    cmd::{Get, Ping, Publish, Set},
+    cmd::{Get, Ping, Publish, Set, Subscribe},
     Connection, Frame,
 };
 
@@ -298,6 +298,65 @@ impl Client {
             Frame::Integer(res) => Ok(res),
             frame => Err(frame.to_error()),
         }
+    }
+
+    /// Subscribes the ciient to the specified channels.
+    ///
+    /// Once a client issues a subscribe command, it may no longer issue any
+    /// non-pub/sub commands.  The function consumes `self` and returns a `Subscriber`.
+    ///
+    /// The `Subscriber` value is used to receive messages as well as manage the
+    /// list of channels the client is subscribed to.
+    pub async fn subscribe(mut self, channels: Vec<String>) -> crate::Result<Subscriber> {
+        // Issue the subscribe command to the server and wait for confirmation.
+        // The client will then have been transitioned into the "subscriber"
+        // state and may only issue pub/sub comands from that point on.
+        self.subscribe_cmd(&channels).await?;
+
+        // Return the `Subscriber` type
+        Ok(Subscriber {
+            client: self,
+            subscribed_channels: channels,
+        })
+    }
+
+    /// The core `SUBSCRIBE` logic, used by misc subscribe fns
+    async fn subscribe_cmd(&mut self, channels: &[String]) -> crate::Result<()> {
+        // Convert the `Subscribe` command into a frame
+        let frame = Subscribe::new(channels.to_vec()).into_frame();
+
+        debug!(request = ?frame);
+
+        // Write the frame to the socket
+        self.connection.write_frame(&frame).await?;
+
+        // For each channel being subscribed to, the server responds with a
+        // message confirming subscription to that channel.
+        for channel in channels {
+            // Read the response
+            let response = self.read_response().await?;
+
+            // Verify it is confirmation of subscription
+            match response {
+                Frame::Array(ref frame) => match frame.as_slice() {
+                    // The server responds with an array frame in the form of:
+                    //
+                    // ```
+                    // [ "subscribe", channel, num-subscribed ]
+                    // ```
+                    //
+                    // where channel is the name of the channel and
+                    // num-subscribed is the number of channels that the client
+                    // is currently subscribed to.
+                    [subscribe, schannel, ..]
+                        if *subscribe == "subscribe" && *schannel == channel => {}
+                    _ => return Err(response.to_error()),
+                },
+                frame => return Err(frame.to_error()),
+            }
+        }
+
+        Ok(())
     }
 
     /// Read a response frame from the socket.
