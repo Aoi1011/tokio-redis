@@ -97,7 +97,7 @@ struct Handler {
     shutdown: Shutdown,
 
     /// Not used directly. Instead, when `Handler` is dropped...?
-    shutdown_complete_tx: mpsc::Sender<()>,
+    _shutdown_complete: mpsc::Sender<()>,
 }
 
 /// Maximum number of concurrent connectiosn the redis server will accept.
@@ -246,7 +246,7 @@ impl Listener {
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
 
                 // Notifies the receiver half once all clones are dropped.
-                shutdown_complete_tx: self.shutdown_complete_tx.clone(),
+                _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
 
             // Spawn a new task to process the connections. Tokio tasks are like
