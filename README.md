@@ -1,5 +1,39 @@
 # Mini Redis
 
+## Main Parts
+- Runtime
+- Resources (i/o, )
+- utility
+- 
+
+## Runtime
+multithread scheduler, 
+
+
+current thread scheduler
+- 
+
+LocalSet
+
+## Mutex
+std::sync::Mutex
+
+
+ReadExt
+
+
+
+WriteExt
+
+
+tokio::sync::Mutex
+
+
+Parallelism
+- `tokio::spawn`
+- `JoinSet`
+
+
 ## Overview
 User can check the weather through this app. If go to the link here `/weather/{city}`, then they can check.
 
