@@ -62,7 +62,8 @@ async fn process(socket: TcpStream, db: Db) {
 //     }
 //     Arc::new(db)
 // }
-async fn increment_and_do_stuff(mutex: &Mutex<i32>) {
-    let mut lock = mutex.lock().unwrap();
-    *lock += 1;
-}
+
+// async fn increment_and_do_stuff(mutex: &Mutex<i32>) {
+//     let mut lock = mutex.lock().unwrap();
+//     *lock += 1;
+// }
