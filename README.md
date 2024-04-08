@@ -47,6 +47,9 @@ RUST_LOG=debug cargo run --bin mini-redis-server
 
 ```
 
+## Resrouces
+- https://tokio.rs/blog/2019-10-scheduler
+
 
 ## API
 - [TOKIO Doc](https://tokio.rs/tokio/)
